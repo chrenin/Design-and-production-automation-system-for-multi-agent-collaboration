@@ -1,0 +1,174 @@
+# multi_agent_system.py
+
+from abc import ABC, abstractmethod
+from collections import defaultdict
+
+
+# =========================
+# Message Bus（消息总线）
+# =========================
+class MessageBus:
+    def __init__(self):
+        self.subscribers = defaultdict(list)
+
+    def subscribe(self, agent_name, callback):
+        self.subscribers[agent_name].append(callback)
+
+    def publish(self, agent_name, message):
+        if agent_name in self.subscribers:
+            for callback in self.subscribers[agent_name]:
+                callback(message)
+
+
+# =========================
+# Agent 基类
+# =========================
+class BaseAgent(ABC):
+    def __init__(self, name, bus):
+        self.name = name
+        self.bus = bus
+
+    @abstractmethod
+    def handle(self, message):
+        pass
+
+    def send(self, target, message):
+        print(f"[{self.name} → {target}] {message['type']}")
+        self.bus.publish(target, message)
+
+
+# =========================
+# Designer Agent（设计）
+# =========================
+class DesignerAgent(BaseAgent):
+    def handle(self, message):
+        if message["type"] == "design_request":
+            idea = message["data"]
+
+            # 模拟设计生成
+            design = f"设计稿<{idea}>"
+
+            print(f"[Designer] 🎨 生成设计: {design}")
+
+            self.send("reviewer", {
+                "type": "design_result",
+                "data": design
+            })
+
+        elif message["type"] == "revision_request":
+            design = message["data"]
+
+            new_design = design + "（修改版）"
+
+            print(f"[Designer] 🔄 修改设计: {new_design}")
+
+            self.send("reviewer", {
+                "type": "design_result",
+                "data": new_design
+            })
+
+
+# =========================
+# Reviewer Agent（审核）
+# =========================
+class ReviewerAgent(BaseAgent):
+    def handle(self, message):
+        if message["type"] == "design_result":
+            design = message["data"]
+
+            print(f"[Reviewer] 🔍 审核设计: {design}")
+
+            # 简单规则：如果没有“修改版”，就打回
+            if "修改版" not in design:
+                print("[Reviewer] ❌ 不通过，需要修改")
+
+                self.send("designer", {
+                    "type": "revision_request",
+                    "data": design
+                })
+            else:
+                print("[Reviewer] ✅ 审核通过")
+
+                self.send("producer", {
+                    "type": "approved_design",
+                    "data": design
+                })
+
+
+# =========================
+# Producer Agent（生产）
+# =========================
+class ProducerAgent(BaseAgent):
+    def handle(self, message):
+        if message["type"] == "approved_design":
+            design = message["data"]
+
+            print(f"[Producer] 🏭 开始生产: {design}")
+
+            # 模拟生产流程
+            print("[Producer] ⚙️ 生产中...")
+            print("[Producer] 📦 打包完成")
+            print("[Producer] 🚚 已发货 ✅")
+
+
+# =========================
+# Scheduler（调度器）
+# =========================
+class Scheduler:
+    def __init__(self):
+        self.agents = {}
+
+    def register(self, agent):
+        self.agents[agent.name] = agent
+
+    def start(self):
+        print("\n🚀 Multi-Agent System Started\n")
+
+
+# =========================
+# Workflow（工作流）
+# =========================
+class Workflow:
+    def __init__(self, bus):
+        self.bus = bus
+
+    def start(self, idea):
+        print(f"📝 新任务: {idea}\n")
+
+        self.bus.publish("designer", {
+            "type": "design_request",
+            "data": idea
+        })
+
+
+# =========================
+# Main
+# =========================
+def main():
+    bus = MessageBus()
+    scheduler = Scheduler()
+
+    # 初始化 Agents
+    designer = DesignerAgent("designer", bus)
+    reviewer = ReviewerAgent("reviewer", bus)
+    producer = ProducerAgent("producer", bus)
+
+    # 注册订阅
+    bus.subscribe("designer", designer.handle)
+    bus.subscribe("reviewer", reviewer.handle)
+    bus.subscribe("producer", producer.handle)
+
+    # 注册到调度器
+    scheduler.register(designer)
+    scheduler.register(reviewer)
+    scheduler.register(producer)
+
+    scheduler.start()
+
+    # 启动工作流
+    workflow = Workflow(bus)
+    workflow.start("高端香水包装设计")
+
+
+if __name__ == "__main__":
+    main()
